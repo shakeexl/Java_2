@@ -1,56 +1,55 @@
-package ru.geekbrains.level_2.lesson_2;
+package ru.geekbrains.level_2.lesson_3;
 
 /*
-1. Напишите метод, на вход которого подаётся двумерный строковый массив размером 4х4. При подаче массива другого размера
-необходимо бросить исключение MyArraySizeException.
+1. Создать массив с набором слов (10-20 слов, должны встречаться повторяющиеся). Найти и вывести список уникальных слов,
+из которых состоит массив (дубликаты не считаем). Посчитать, сколько раз встречается каждое слово.
 
-2. Далее метод должен пройтись по всем элементам массива, преобразовать в int и просуммировать. Если в каком-то элементе
-массива преобразование не удалось (например, в ячейке лежит символ или текст вместо числа), должно быть брошено
-исключение MyArrayDataException с детализацией, в какой именно ячейке лежат неверные данные.
-
-3. В методе main() вызвать полученный метод, обработать возможные исключения MyArraySizeException и MyArrayDataException и
-вывести результат расчета (сумму элементов, при условии что подали на вход корректный массив).
-
-Заметка: Для преобразования строки к числу используйте статический метод класса Integer:
-Integer.parseInt(сюда_подать_строку);
-Заметка: Если Java не сможет преобразовать входную строку (в строке число криво написано), то будет сгенерировано
-исключение NumberFormatException.
+2. Написать простой класс Телефонный Справочник, который хранит в себе список фамилий и телефонных номеров. В этот
+телефонный справочник с помощью метода add() можно добавлять записи, а с помощью метода get() искать номер телефона по
+фамилии. Следует учесть, что под одной фамилией может быть несколько телефонов (в случае однофамильцев), тогда при
+запросе такой фамилии должны выводиться все телефоны. Желательно не добавлять лишний функционал (дополнительные поля
+(имя, отчество, адрес), взаимодействие с пользователем через консоль и т.д). Консоль использовать только для вывода
+результатов проверки телефонного справочника.
  */
 
+import java.util.*;
+
 public class Main {
+    public static void main(String[] args){
 
-    public static void main(String[] args) {
+        System.out.println("Task 1:\n");
 
-        String[][] array = new String[][]{{"1", "2", "3X", "4"}, {"2", "2", "2", "3"},
-                                          {"1", "2", "2", "2"}, {"2", "2", "2", "2"}};
-        try {
-            try {
-                ArrException(array);
-            } catch (MyArraySizeException e) {e.printStackTrace();}
-        } catch (MyArrayDataException e) {e.printStackTrace(); System.out.println("Error in cell "+ e.i + "x" + e.j);}
-    }
+        List<String> words = Arrays.asList(
+                "Python", "JavaScript", "Java", "C++", "Golang",
+                "C#", "SQL", "Dart", "C++", "Golang",
+                "JavaScript", "Audi", "C++", "C#", "Golang",
+                "Python", "JavaScript", "Java", "Java", "SQL"
+        );
 
-    public static void ArrException(String[][] array) throws MyArraySizeException, MyArrayDataException {
-        int sum = 0;
+        Set<String> unique = new HashSet<>(words);
 
-        if (array.length != 4 && array[0].length == 4) {
-            throw new MyArraySizeException("Invalid number of rows");
+        System.out.println("Initial array:");
+        System.out.println(words);
+
+        System.out.println("Unique words:");
+        System.out.println(unique);
+
+        System.out.println("Frequency:");
+        for (String key : unique) {
+            System.out.println(key + ": " + Collections.frequency(words, key) + "\n");
         }
-        if (array.length == 4 && array[0].length != 4) {
-            throw new MyArraySizeException("Invalid number of columns");
+
+        System.out.println("Task 2:\n");
+
+        Phonebook phonebook = new Phonebook();
+        List<String> surnames = Arrays.asList("Smith", "Johnson", "Williams", "Brown", "Jones", "Miller");
+        List<String> phones = Arrays.asList("202-555-0146", "202-555-0129", "202-555-0157", "202-555-0198", "202-555-0103");
+
+        for (int i = 0, j = 0; i < surnames.size() && j < phones.size(); i++, j++) {
+            phonebook.add(surnames.get(i), phones.get(j));
         }
-        if (array[0].length != 4 && array.length != 4) {
-            throw new MyArraySizeException("Invalid number of columns and rows");
-        }
-        for (int i = 0; i < array[0].length; i++) {
-            for (int j = 0; j < array.length; j++) {
-                try {
-                    sum += Integer.parseInt(array[i][j]);
-                } catch (NumberFormatException e) {
-                    throw new MyArrayDataException(i, j);
-                }
-            }
-        }
-        System.out.println("Sum of array elements: " + sum);
+
+        System.out.println(phonebook.get("Smith"));
+        System.out.println(phonebook.get("Miller"));
     }
 }
