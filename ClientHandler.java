@@ -1,101 +1,166 @@
-package com.geekbrains.chat.server;
+package server;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 
 public class ClientHandler {
-    private Socket socket;
-    private Server server;
-    private DataInputStream in;
-    private DataOutputStream out;
-    private String username;
+    DataInputStream in;
+    DataOutputStream out;
+    Server server;
+    Socket socket;
 
-    public ClientHandler(Socket socket, Server server) throws IOException {
-        this.socket = socket;
-        this.in = new DataInputStream(socket.getInputStream());
-        this.out = new DataOutputStream(socket.getOutputStream());
-        this.server = server;
+    private String nickname;
+    private String login;
 
-        new Thread(() -> {
-            try {
-                while (true) {
-                    String msg = in.readUTF();
-                    if(msg.startsWith("/login ")) {
-                        String usernameFromLogin = msg.split("\\s")[1];
+    private final int timeOut = 120000;
+    private final int timeDisc = 2000;
 
-                        if(server.isNickBusy(usernameFromLogin)) {
-                            sendMessage("/login_failed Current nickname has already been occupied");
-                            continue;
-                        }
+    public ClientHandler(Server server, Socket socket) {
+        try {
+            this.server = server;
+            this.socket = socket;
+            in = new DataInputStream( socket.getInputStream() );
+            out = new DataOutputStream( socket.getOutputStream() );
+            System.out.println( "Client connected " + socket.getRemoteSocketAddress() );
 
-                        username = usernameFromLogin;
-                        sendMessage("/login_ok " + username);
-                        server.subscribe(this);
+            new Thread( () -> {
+                try {
+
+                    socket.setSoTimeout( timeOut - timeDisc );
+                    sendMsg( "You need to log in within " + (timeOut/100) +
+                            " seconds" );
+                    authenticationCycle();
+
+                    communicationCycle();
+
+                } catch (SocketTimeoutException e) {
+                    sendMsg( "Client disconnected by time" );
+                    try {
+                        Thread.sleep(timeDisc);
+                    } catch (InterruptedException interruptedException) {
+                        interruptedException.printStackTrace();
+                    }
+
+                    System.out.println( "Client disconnected by time" + socket.getRemoteSocketAddress() );
+                    closeThis();
+                } catch (IOException e) {
+                    e.printStackTrace();
+
+                } finally {
+                    server.unsubscribe( this );
+                    System.out.println( "Client disconnected " + socket.getRemoteSocketAddress() );
+                    closeThis();
+                }
+            } ).start();
+            new Thread( () -> {
+                try {
+                    Thread.sleep(2000);
+                } catch (InterruptedException interruptedException) {
+                    interruptedException.printStackTrace();
+                }
+                server.broadcastClientList();
+            }).start();
+
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void authenticationCycle() throws IOException {
+        while (true) {
+
+            String str = in.readUTF();
+
+            if (str.startsWith( "/reg " )) {
+                String[] token = str.split( "\\s" );
+                if (token.length < 4) {
+                    continue;
+                }
+                boolean b = server.getAuthService()
+                        .registration( token[1], token[2], token[3] );
+                if (b) {
+                    sendMsg( "/regok" );
+                } else {
+                    sendMsg( "/regno" );
+                }
+            }
+
+            if (str.startsWith( "/auth " )) {
+                String[] token = str.split( "\\s" );
+                if (token.length < 3) {
+                    continue;
+                }
+                String newNick = server.getAuthService()
+                        .getNicknameByLoginAndPassword( token[1], token[2] );
+                if (newNick != null) {
+                    login = token[1];
+                    if (!server.isLoginAuthenticated( login )) {
+                        nickname = newNick;
+                        sendMsg("/authok " + newNick);
+                        socket.setSoTimeout( 0 );
+                        server.subscribe( this );
                         break;
-                    }
-                }
-
-                while (true) {
-                    String msg = in.readUTF();
-
-                    if(msg.startsWith("/w"))
-                    {
-                        String to = msg.split(" ")[1];
-                        String msg_new = msg.split(" ",3)[2];
-                        server.whisperMessage(this, to, msg_new);
-
                     } else {
-                        server.broadcastMessage("[" + this.username + "] " + msg);
+                        sendMsg("Login already taken");
                     }
 
+                } else {
+                    sendMsg("Invalid username/password");
                 }
-            } catch (IOException e) {
-                e.printStackTrace();
-            } finally {
-                disconnect();
             }
-        }).start();
+
+        }
     }
 
-    private void disconnect() {
-        server.unsubscribe(this);
-        if(in != null) {
-            try {
-                in.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-        if(out != null) {
-            try {
-                out.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-        if(socket != null) {
-            try {
-                socket.close();
-            } catch (IOException e) {
-                e.printStackTrace();
+    private void communicationCycle() throws IOException {
+        while (true) {
+            String str = in.readUTF();
+            if (str.startsWith( "/" )) {
+                if (str.equals( "/end" )) {
+                    sendMsg( "/end" );
+                    break;
+                }
+                if (str.startsWith( "/w " )) {
+                    String[] token = str.split( "\\s", 3 );
+                    if (token.length < 3) {
+                        continue;
+                    }
+                    server.privateMsg( this, token[1], token[2] );
+                }
+            } else {
+                server.broadcastMsg( this, str );
             }
         }
     }
 
-    public void sendMessage(String message) throws IOException {
-        try
-        {
-            out.writeUTF(message);
-        }
-        catch(IOException ex)
-        {
-            ex.printStackTrace();
+    public void sendMsg(String msg) {
+        try {
+            out.writeUTF( msg );
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 
-    public String getUsername() {
-        return username;
+    public void closeThis() {
+        try {
+            socket.close();
+            in.close();
+            out.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
+
+    public String getNickname() {
+        return nickname;
+    }
+
+    public String getLogin() {
+        return login;
+    }
+
 }
